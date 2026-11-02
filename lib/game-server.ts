@@ -30,7 +30,9 @@ export async function pulse(p:any,interacting:boolean){
  if(p.phase==='active'||p.phase==='finished')await ensureScene(p);
  const status=signal(peer,now);if(p.observed_signal!==status){if(status!=='online'&&status!=='finished')await msg(`${p.id}:signal:${now}`,p,'signal',status==='left'?'Сигнал потерян. Собеседник отключился.':status==='idle'?'Сигнал потерян. Давно нет ответа.':'Сигнал потерян. Телефон не в сети.',now).run();else if(p.observed_signal&&p.observed_signal!=='online')await msg(`${p.id}:signal:${now}`,p,'signal',status==='finished'?'Собеседник дошёл до места встречи.':'Связь восстановлена.',now).run();await db().prepare('UPDATE participants SET observed_signal=? WHERE id=?').bind(status,p.id).run();}
  }
- return p;
+ // Scene creation updates reply_at; return the persisted row so the client
+ // cannot enable its composer using the previous scene's deadline.
+ return db().prepare('SELECT p.*,r.code,r.story_version FROM participants p JOIN rooms r ON r.id=p.room_id WHERE p.id=?').bind(p.id).first<any>();
 }
 export async function canReadNote(p:any,note:any){if(note.participant_id===p.id)return true;const peer=await db().prepare('SELECT finished,consent,left_session FROM participants WHERE room_id=? AND id<>?').bind(p.room_id,p.id).first<any>();if(p.finished&&peer?.finished)return true;return !!await db().prepare('SELECT id FROM messages WHERE participant_id=? AND note_id=? AND deliver_at<=?').bind(p.id,note.id,Date.now()).first();}
 export async function gameState(p:any){const now=Date.now(),peer=await db().prepare('SELECT * FROM participants WHERE room_id=? AND id<>?').bind(p.room_id,p.id).first<any>();const unlocked=!!(p.finished&&peer?.finished),mutual=unlocked&&p.consent==='yes'&&peer.consent==='yes'&&!p.left_session&&!peer.left_session;
