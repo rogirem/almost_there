@@ -8,9 +8,11 @@ export async function POST(req:Request){try{
  if(b.action==='logout'){await db().prepare('UPDATE participants SET left_session=1 WHERE id=?').bind(p.id).run();return Response.json({ok:true},{headers:{'Set-Cookie':'piter_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'}});}
  if(p.left_session)return json({error:'Эта прогулка завершена'},409);
  if(b.action==='leave'){await db().prepare('UPDATE participants SET left_session=1 WHERE id=?').bind(p.id).run();return json({ok:true});}
- const peer=await db().prepare('SELECT id,finished,left_session,consent FROM participants WHERE room_id=? AND id<>?').bind(p.room_id,p.id).first<any>();
+ const peer=await db().prepare('SELECT id,finished,left_session,consent,reply_at FROM participants WHERE room_id=? AND id<>?').bind(p.room_id,p.id).first<any>();
  if(b.action==='consent'){
  if(!p.finished||!peer?.finished)return json({error:'Дождёмся обоих в финале'},409);
+ if(p.story_version===3&&Date.now()<Math.max(p.reply_at,peer.reply_at))return json({error:'Дождись последнего сообщения.'},409);
+ if(peer.left_session)return json({error:'Второй участник уже вышел из прогулки.'},409);
  if(!['yes','no'].includes(b.value))return json({error:'Выбери ответ'},400);
  const detail=String(b.detail||'').trim();if(detail.length>120)return json({error:'Описание должно быть короче 120 символов'},400);
  await db().prepare('UPDATE participants SET consent=?,detail=? WHERE id=?').bind(b.value,detail,p.id).run();return json({ok:true});
